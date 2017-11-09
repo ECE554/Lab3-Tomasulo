@@ -236,11 +236,8 @@ void issue_To_execute(int current_cycle) {
 void dispatch_To_issue(int current_cycle) {
 
   /* ECE552: YOUR CODE GOES HERE */
+    
 }
-
-
-
-
 
 /* 
  * Description: 
@@ -288,6 +285,17 @@ void fetch_To_dispatch(instruction_trace_t* trace, int current_cycle) {
         int pushed_to_RS = push_to_resource(reservINT, RESERV_INT_SIZE, next_instr);
         if(pushed_to_RS != -1) {
             next_instr->pop_from_IFQ();
+            
+            //update mapTable and dependencies in RS
+            update_map_table(next_instr);
+            int i = 0;
+            for(; i < 3; i++) {
+                r_in = next_instr->r_in[i];
+                if(map_table[r_in] != NULL) {
+                    next_instr->Q[i] = map_table[r_in];
+                }
+            }
+            
             next_instr->tom_dispatch_cycle = current_cycle;
             return;
         }
@@ -297,20 +305,24 @@ void fetch_To_dispatch(instruction_trace_t* trace, int current_cycle) {
         int pushed_to_RS = push_to_resource(reservFP, RESERV_FP_SIZE, next_instr);
         if(pushed_to_RS != -1) {
             next_instr->pop_from_IFQ();
+            
+            //update mapTable and dependencies in RS
+            update_map_table(next_instr);
+            int i = 0;
+            for(; i < 3; i++) {
+                r_in = next_instr->r_in[i];
+                if(map_table[r_in] != NULL) {
+                    next_instr->Q[i] = map_table[r_in];
+                }
+            }
+            
             next_instr->tom_dispatch_cycle = current_cycle;
             return;
         }
     }
     
-    //update mapTable and dependencies in RS
-    update_map_table(next_instr);
-    int i = 0;
-    for(; i < 3; i++) {
-        r_in = next_instr->r_in[i];
-        if(map_table[r_in] != NULL) {
-            next_instr->Q[i] = map_table[r_in];
-        }
-    }
+    
+    
 }
 
 /* 
