@@ -64,6 +64,9 @@
 
 #define IS_BRANCH(op) (IS_COND_CTRL(op) || IS_UNCOND_CTRL(op))
 
+#define NUM_INPUT_REGS 3
+#define NUM_OUTPUT_REGS 2
+
 /* FOR DEBUGGING */
 
 //prints info about an instruction
@@ -145,7 +148,7 @@ int push_to_resource(instruction_t** queue, int size, instruction_t* instr) {
 
 void update_map_table(instruction_t *instr) {
     int i = 0;
-    for(; i < 2; i++) {
+    for(; i < NUM_OUTPUT_REGS; i++) {
         r_out = instr->r_out[i]
         if(r_out != NULL) {
             //checking for valid output reg
@@ -156,13 +159,70 @@ void update_map_table(instruction_t *instr) {
 
 void clear_map_table(instruction_t *instr) {
     int i = 0;
-    for(; i < 2; i++) {
+    for(; i < NUM_OUTPUT_REGS; i++) {
         r_out = instr->r_out[i]
         if(map_table[r_out] == instr) {
             //if this intruction was the last to rename r_out
             map_table[r_out] = NULL;
         }
     }
+}
+
+int instr_is_ready(instruction_t *instr) {
+    int i = 0;
+    int is_ready = 1;
+    for(; i < NUM_INPUT_REGS; i++) {
+        if(instr->Q[i] != NULL) is_ready = 0;
+        //i think we'll set instr->Q[i] to NULL once CBD broadcasts?
+        
+    }
+    
+    return is_ready;
+}
+
+//only called when there is space available in INT_FU
+instruction_t *pop_oldest_ready_int_instr() {
+    int i = 0;
+    instruction_t *oldest_instr = NULL;
+    int oldest_instr_index;
+    for(; i < RESERV_INT_SIZE; i++) {
+        instruction_t *instr = reservINT[i];
+        if(instr != NULL && instr_is_ready(instr)) {
+            if(oldest_instr == NULL) {
+                oldest_instr = instr; //if the first instr in the reservation station is NULL
+                oldest_instr_index = i;
+            }
+            else if(instr->index < oldest_instr->index) {
+                oldest_instr = instr;
+                oldest_instr_index = i;
+            }
+        }
+    }
+    
+    if(oldest_instr != NULL) reservINT[i] = NULL;
+}
+
+//only called when there is space available in FP_FU
+instruction_t *pop_oldest_ready_fp_instr() {
+    int i = 0;
+    instruction_t *oldest_instr = NULL;
+    int oldest_instr_index;
+    
+    for(; i < RESERV_FP_SIZE; i++) {
+        instruction_t *instr = reservFP[i];
+        if(instr != NULL && instr_is_ready(instr)) {
+            if(oldest_instr == NULL) {
+                oldest_instr = instr; //if the first instr in the reservation station is NULL
+                oldest_instr_index = i;
+            }
+            else if(instr->index < oldest_instr->index) {
+                oldest_instr = instr;
+                oldest_instr_index = i;
+            }
+        }
+    }
+    
+    if(oldest_instr != NULL) reservFP[i] = NULL;
 }
 
 /* 
@@ -236,7 +296,31 @@ void issue_To_execute(int current_cycle) {
 void dispatch_To_issue(int current_cycle) {
 
   /* ECE552: YOUR CODE GOES HERE */
+    //check if we can send an INT instruction through
+    int i = 0;
+    for(; i < FU_INT_SIZE; i++) {
+        if(fuINT[i] == NULL) {
+            //can add an instruction
+            instruction_t *instr = pop_oldest_ready_int_instr() //sets reservation station entry to NULL for that instr
+            if(instr != NULL) {
+                fuINT[i] = instr;
+                instr->tom_issue_cycle = current_cycle;
+            }
+        }
+    }
     
+    //check if we can send an FP instruction through
+    i = 0;
+    for(; i < FU_FP_SIZE; i++) {
+        if(fuFP[i] == NULL) {
+            //can add an instruction
+            instruction_t *instr = pop_oldest_ready_fp_instr() //sets reservation station entry to NULL for that instr
+            if(instr != NULL) {
+                fuFP[i] = instr;
+                instr->tom_issue_cycle = current_cycle;
+            }
+        }
+    }
 }
 
 /* 
@@ -289,11 +373,12 @@ void fetch_To_dispatch(instruction_trace_t* trace, int current_cycle) {
             //update mapTable and dependencies in RS
             update_map_table(next_instr);
             int i = 0;
-            for(; i < 3; i++) {
+            for(; i < NUM_INPUT_REGS; i++) {
                 r_in = next_instr->r_in[i];
                 if(map_table[r_in] != NULL) {
                     next_instr->Q[i] = map_table[r_in];
                 }
+                //asssuming if map_table entry is NULL value is in regfile and I don't think we need to worry about that
             }
             
             next_instr->tom_dispatch_cycle = current_cycle;
@@ -309,11 +394,12 @@ void fetch_To_dispatch(instruction_trace_t* trace, int current_cycle) {
             //update mapTable and dependencies in RS
             update_map_table(next_instr);
             int i = 0;
-            for(; i < 3; i++) {
+            for(; i < NUM_INPUT_REGS; i++) {
                 r_in = next_instr->r_in[i];
                 if(map_table[r_in] != NULL) {
                     next_instr->Q[i] = map_table[r_in];
                 }
+                //asssuming if map_table entry is NULL value is in regfile and I don't think we need to worry about that
             }
             
             next_instr->tom_dispatch_cycle = current_cycle;
