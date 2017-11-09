@@ -180,49 +180,32 @@ int instr_is_ready(instruction_t *instr) {
     return is_ready;
 }
 
-//only called when there is space available in INT_FU
-instruction_t *pop_oldest_ready_int_instr() {
+
+instruction_t *get_oldest_int_instr() {
     int i = 0;
     instruction_t *oldest_instr = NULL;
-    int oldest_instr_index;
+    
     for(; i < RESERV_INT_SIZE; i++) {
         instruction_t *instr = reservINT[i];
-        if(instr != NULL && instr_is_ready(instr)) {
-            if(oldest_instr == NULL) {
-                oldest_instr = instr; //if the first instr in the reservation station is NULL
-                oldest_instr_index = i;
-            }
-            else if(instr->index < oldest_instr->index) {
-                oldest_instr = instr;
-                oldest_instr_index = i;
-            }
+        if(instr != NULL) {
+            if(oldest_instr == NULL) oldest_instr = instr; //if the first instr in the reservation station is NULL
+            else if(instr->index < oldest_instr->index) oldest_instr = instr;
         }
     }
-    
-    if(oldest_instr != NULL) reservINT[i] = NULL;
 }
 
 //only called when there is space available in FP_FU
-instruction_t *pop_oldest_ready_fp_instr() {
+instruction_t *get_oldest_fp_instr() {
     int i = 0;
     instruction_t *oldest_instr = NULL;
-    int oldest_instr_index;
     
     for(; i < RESERV_FP_SIZE; i++) {
         instruction_t *instr = reservFP[i];
-        if(instr != NULL && instr_is_ready(instr)) {
-            if(oldest_instr == NULL) {
-                oldest_instr = instr; //if the first instr in the reservation station is NULL
-                oldest_instr_index = i;
-            }
-            else if(instr->index < oldest_instr->index) {
-                oldest_instr = instr;
-                oldest_instr_index = i;
-            }
+        if(instr != NULL) {
+            if(oldest_instr == NULL) oldest_instr = instr; //if the first instr in the reservation station is NULL
+            else if(instr->index < oldest_instr->index) oldest_instr = instr;
         }
     }
-    
-    if(oldest_instr != NULL) reservFP[i] = NULL;
 }
 
 /* 
@@ -298,27 +281,19 @@ void dispatch_To_issue(int current_cycle) {
   /* ECE552: YOUR CODE GOES HERE */
     //check if we can send an INT instruction through
     int i = 0;
-    for(; i < FU_INT_SIZE; i++) {
-        if(fuINT[i] == NULL) {
-            //can add an instruction
-            instruction_t *instr = pop_oldest_ready_int_instr() //sets reservation station entry to NULL for that instr
-            if(instr != NULL) {
-                fuINT[i] = instr;
-                instr->tom_issue_cycle = current_cycle;
-            }
+    for(; i < RESERV_INT_SIZE; i++) {
+        instruction_t *instr = reservINT[i];
+        if(instr && instr->tom_issue_cycle == 0) {
+            tom_issue_cycle = current_cycle;
         }
     }
     
     //check if we can send an FP instruction through
     i = 0;
-    for(; i < FU_FP_SIZE; i++) {
-        if(fuFP[i] == NULL) {
-            //can add an instruction
-            instruction_t *instr = pop_oldest_ready_fp_instr() //sets reservation station entry to NULL for that instr
-            if(instr != NULL) {
-                fuFP[i] = instr;
-                instr->tom_issue_cycle = current_cycle;
-            }
+    for(; i < RESERV_FP_SIZE; i++) {
+        instruction_t *instr = reservFP[i];
+        if(instr && instr->tom_issue_cycle == 0) {
+            tom_issue_cycle = current_cycle;
         }
     }
 }
@@ -359,7 +334,8 @@ void fetch_To_dispatch(instruction_trace_t* trace, int current_cycle) {
   
   /* ECE552: YOUR CODE GOES HERE */
     if(IS_BRANCH(instr_queue[0]->op)) {
-        pop_from_IFQ();
+        instruction_t *instr = pop_from_IFQ();
+        instr->tom_dispatch_cycle = current_cycle;
         return;
     }
     
@@ -406,9 +382,6 @@ void fetch_To_dispatch(instruction_trace_t* trace, int current_cycle) {
             return;
         }
     }
-    
-    
-    
 }
 
 /* 
