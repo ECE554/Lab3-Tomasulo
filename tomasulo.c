@@ -143,7 +143,27 @@ int push_to_resource(instruction_t** queue, int size, instruction_t* instr) {
     return -1;
 }
 
+void update_map_table(instruction_t *instr) {
+    int i = 0;
+    for(; i < 2; i++) {
+        r_out = instr->r_out[i]
+        if(r_out != NULL) {
+            //checking for valid output reg
+            map_table[r_out] = instr;
+        }
+    }
+}
 
+void clear_map_table(instruction_t *instr) {
+    int i = 0;
+    for(; i < 2; i++) {
+        r_out = instr->r_out[i]
+        if(map_table[r_out] == instr) {
+            //if this intruction was the last to rename r_out
+            map_table[r_out] = NULL;
+        }
+    }
+}
 
 /* 
  * Description: 
@@ -282,6 +302,15 @@ void fetch_To_dispatch(instruction_trace_t* trace, int current_cycle) {
         }
     }
     
+    //update mapTable and dependencies in RS
+    update_map_table(next_instr);
+    int i = 0;
+    for(; i < 3; i++) {
+        r_in = next_instr->r_in[i];
+        if(map_table[r_in] != NULL) {
+            next_instr->Q[i] = map_table[r_in];
+        }
+    }
 }
 
 /* 
