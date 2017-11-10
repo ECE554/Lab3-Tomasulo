@@ -131,7 +131,7 @@ instruction_t *pop_from_IFQ() {
         instr_queue[i] = NULL;
     }
     
-    return instr
+    return instr;
 }
 
 int push_to_resource(instruction_t** queue, int size, instruction_t* instr) {
@@ -149,8 +149,8 @@ int push_to_resource(instruction_t** queue, int size, instruction_t* instr) {
 void update_map_table(instruction_t *instr) {
     int i = 0;
     for(; i < NUM_OUTPUT_REGS; i++) {
-        r_out = instr->r_out[i]
-        if(r_out != NULL) {
+        int r_out = instr->r_out[i];
+        if(r_out != -1 && r_out != 0) {
             //checking for valid output reg
             map_table[r_out] = instr;
         }
@@ -160,8 +160,8 @@ void update_map_table(instruction_t *instr) {
 void clear_map_table(instruction_t *instr) {
     int i = 0;
     for(; i < NUM_OUTPUT_REGS; i++) {
-        r_out = instr->r_out[i]
-        if(map_table[r_out] == instr) {
+        int r_out = instr->r_out[i];
+        if(r_out != -1 && r_out != 0 && map_table[r_out] == instr) {
             //if this intruction was the last to rename r_out
             map_table[r_out] = NULL;
         }
@@ -192,6 +192,8 @@ instruction_t *get_oldest_ready_int_instr() {
             else if(instr->index < oldest_instr->index) oldest_instr = instr;
         }
     }
+
+    return oldest_instr;
 }
 
 //only called when there is space available in FP_FU
@@ -206,6 +208,8 @@ instruction_t *get_oldest_ready_fp_instr() {
             else if(instr->index < oldest_instr->index) oldest_instr = instr;
         }
     }
+
+    return oldest_instr;
 }
 
 /* 
@@ -220,8 +224,13 @@ instruction_t *get_oldest_ready_fp_instr() {
 static bool is_simulation_done(counter_t sim_insn) {
 
   /* ECE552: YOUR CODE GOES HERE */
-
-  return true; //ECE552: you can change this as needed; we've added this so the code provided to you compiles
+    int rtn = 0;
+    if (commonDataBus != NULL && commonDataBus->index >= sim_insn - 1) rtn = true;
+    rtn = false; 
+    commonDataBus = NULL;
+    return rtn;
+    
+    //ECE552: you can change this as needed; we've added this so the code provided to you compiles
 }
 
 /* 
@@ -235,7 +244,27 @@ static bool is_simulation_done(counter_t sim_insn) {
 void CDB_To_retire(int current_cycle) {
 
   /* ECE552: YOUR CODE GOES HERE */
+    if (commonDataBus == NULL) return;
 
+    int i;
+    int j;
+    //For all instrs in res station, reset their Q if it is in CDB
+    for(i = 0; i < RESERV_INT_SIZE; i++) {
+        instruction_t *instr = reservINT[i];
+        if (instr == NULL) continue;
+        for (j = 0; j < NUM_INPUT_REGS; j++) {
+            if (instr->Q[j] == commonDataBus) instr->Q[j] = NULL;
+        }
+    }
+
+    //For all instrs in res station, reset their Q if it is in CDB
+    for(i = 0; i < RESERV_FP_SIZE; i++) {
+        instruction_t *instr = reservFP[i];
+        if (instr == NULL) continue;
+        for (j = 0; j < NUM_INPUT_REGS; j++) {
+            if (instr->Q[j] == commonDataBus) instr->Q[j] = NULL;
+        }
+    }
 }
 
 
@@ -250,7 +279,50 @@ void CDB_To_retire(int current_cycle) {
 void execute_To_CDB(int current_cycle) {
 
   /* ECE552: YOUR CODE GOES HERE */
+    int i;
+    int cdbINT = 0;
+    int cdb_index = -1;
+    for(i = 0; i < FU_INT_SIZE; i++) {
+        if(fuINT[i] != NULL) {
+            instruction_t *instr = fuINT[i];
+            if (current_cycle - instr->tom_execute_cycle >= FU_FP_LATENCY) { // Ready to broadcast
+                if (commonDataBus == NULL){
+                     commonDataBus = instr;
+                     cdbINT = true;
+                     cdb_index = i;
+                }
+                else if (instr->index < commonDataBus->index){
+                    commonDataBus = instr;
+                    cdbINT = true;
+                    cdb_index = i;
+                }
+            }
+        }
+    }
 
+    for(i = 0; i < FU_FP_SIZE; i++) {
+        if(fuFP[i] != NULL) {
+            instruction_t *instr = fuFP[i];
+            if (current_cycle - instr->tom_execute_cycle >= FU_FP_LATENCY) { // Ready to broadcast
+                if (commonDataBus == NULL){
+                     commonDataBus = instr;
+                     cdbINT = false;
+                     cdb_index = i;
+                }
+                else if (instr->index < commonDataBus->index){
+                     commonDataBus = instr;
+                     cdbINT = false;
+                     cdb_index = i;
+                }
+            }
+        }
+    }
+
+    if (commonDataBus != NULL) {
+        commonDataBus->tom_cdb_cycle = current_cycle; //Only the last set instr (oldest) gets to use the CDB
+        if (cdbINT) fuINT[cdb_index] = NULL;
+        else fuFP[cdb_index] = NULL;
+    }
 }
 
 /* 
@@ -273,6 +345,7 @@ void issue_To_execute(int current_cycle) {
             //can add an instruction
             instruction_t *instr = get_oldest_ready_int_instr();
             if(instr != NULL && instr->tom_issue_cycle  < current_cycle) {
+                fuINT[i] = instr;
                 instr->tom_execute_cycle = current_cycle;
             }
         }
@@ -282,8 +355,9 @@ void issue_To_execute(int current_cycle) {
     for(i = 0; i < FU_FP_SIZE; i++) {
         if(fuFP[i] == NULL) {
             //can add an instruction
-            instruction_t *instr = pop_oldest_ready_fp_instr();
+            instruction_t *instr = get_oldest_ready_fp_instr();
             if(instr != NULL && instr->tom_issue_cycle  < current_cycle) {
+                fuFP[i] = instr;
                 instr->tom_execute_cycle = current_cycle;
             }
         }
@@ -335,7 +409,7 @@ void fetch(instruction_trace_t* trace) {
   /* ECE552: YOUR CODE GOES HERE */
     instruction_t* instr = get_instr(trace, fetch_index);
     
-    while(IS_TRAP(instr->op)) instr = get_instr(trace, ++fetch_index);
+    while(IS_TRAP(instr->op) || instr->op == 0) instr = get_instr(trace, ++fetch_index);
     
     int pushed = push_to_IFQ(instr);
     if(pushed) {
@@ -357,29 +431,33 @@ void fetch_To_dispatch(instruction_trace_t* trace, int current_cycle) {
   fetch(trace);
   
   /* ECE552: YOUR CODE GOES HERE */
-    if(IS_BRANCH(instr_queue[0]->op)) {
-        instruction_t *instr = pop_from_IFQ();
-        instr->tom_dispatch_cycle = current_cycle;
+    instruction_t *next_instr = instr_queue[0];
+    
+    if(IS_BRANCH(next_instr->op)) {
+        pop_from_IFQ();
+        next_instr->tom_dispatch_cycle = current_cycle;
         return;
     }
     
-    instruction_t *next_instr = instr_queue[0];
-    
     if(USES_INT_FU(next_instr->op)) {
-        int pushed_to_RS = push_to_resource(reservINT, RESERV_INT_SIZE, next_instr);
-        if(pushed_to_RS != -1) {
-            next_instr->pop_from_IFQ();
+        int i;
+        int rs_idx = -1;
+        for(i = 0; i < RESERV_INT_SIZE; i++) {
+            if(reservINT[i] == NULL) {
+                reservINT[i] = next_instr;
+                rs_idx = i;
+            }
+        }
+
+        if(rs_idx != -1) { //There was room for it in RS
+            pop_from_IFQ(); //Remove from from of IFQ
             
             //update mapTable and dependencies in RS
-            update_map_table(next_instr);
-            int i;
             for(i = 0; i < NUM_INPUT_REGS; i++) {
-                r_in = next_instr->r_in[i];
-                if(map_table[r_in] != NULL) {
-                    next_instr->Q[i] = map_table[r_in];
-                }
-                //asssuming if map_table entry is NULL value is in regfile and I don't think we need to worry about that
+                if (next_instr->r_in[i] != -1) next_instr->Q[i] = map_table[next_instr->r_in[i]]; //Set RAW HAZARDS
+                else next_instr->Q[i] = NULL;
             }
+            update_map_table(next_instr);
             
             next_instr->tom_dispatch_cycle = current_cycle;
             return;
@@ -387,26 +465,32 @@ void fetch_To_dispatch(instruction_trace_t* trace, int current_cycle) {
     }
     
     if(USES_FP_FU(next_instr->op)) {
-        int pushed_to_RS = push_to_resource(reservFP, RESERV_FP_SIZE, next_instr);
-        if(pushed_to_RS != -1) {
-            next_instr->pop_from_IFQ();
+        int i;
+        int rs_idx = -1;
+        for(i = 0; i < RESERV_FP_SIZE; i++) {
+            if(reservFP[i] == NULL) {
+                reservFP[i] = next_instr;
+                rs_idx = i;
+            }
+        }
+
+        if(rs_idx != -1) {
+            pop_from_IFQ();
             
             //update mapTable and dependencies in RS
-            update_map_table(next_instr);
-            int i;
             for(i = 0; i < NUM_INPUT_REGS; i++) {
-                r_in = next_instr->r_in[i];
-                if(map_table[r_in] != NULL) {
-                    next_instr->Q[i] = map_table[r_in];
-                }
-                //asssuming if map_table entry is NULL value is in regfile and I don't think we need to worry about that
+                if (next_instr->r_in[i] != -1) next_instr->Q[i] = map_table[next_instr->r_in[i]]; //Set RAW HAZARDS
+                else next_instr->Q[i] = NULL;
             }
+            update_map_table(next_instr);
             
             next_instr->tom_dispatch_cycle = current_cycle;
             return;
         }
     }
 }
+
+void debug_cycle(int cycle);
 
 /* 
  * Description: 
@@ -452,20 +536,62 @@ counter_t runTomasulo(instruction_trace_t* trace)
   
   int cycle = 1;
   while (true) {
-
+    if (cycle % 100 == 0) printf("Cycle #: %d \n", cycle);
      /* ECE552: YOUR CODE GOES HERE */
-      fetch(trace, cycle);
+    //   fetch(trace, cycle);
+                int debug = 0;    
+                if(debug) printf("F2D\n");
       fetch_To_dispatch(trace, cycle);
-      dispatch_To_issue(trace, cycle);
-      issue_To_execute(trace, cycle);
-      execute_To_CDB(trace, cycle);
-      CDB_To_retire(trace, cycle);
+                if(debug) printf("D2I\n");
+      dispatch_To_issue(cycle);
+                if(debug) printf("I2E\n");
+      issue_To_execute(cycle);
+                if(debug) printf("E2C\n");
+      execute_To_CDB(cycle);
+                if(debug) printf("C2R\n");
+      CDB_To_retire(cycle);
+
+
+                debug_cycle(cycle);
 
      cycle++;
-
      if (is_simulation_done(sim_num_insn))
         break;
   }
   
-  return cycle;
+  return cycle; 
+}
+
+void debug_cycle(int cycle) {
+    printf("Cycle: %d\n", cycle);
+
+    int i = 0;
+    int count = 0;
+
+    for(i = 0; i < INSTR_QUEUE_SIZE; i++) {
+        if(instr_queue[i] != NULL) count++;
+    }
+    printf("\tNum In IFQ: %d\n\n", count);
+    count = 0;
+    for (i = 0; i < RESERV_INT_SIZE; i++) {
+        if (reservINT[i] != NULL) count++;
+    }
+    printf("\tNum In rINT: %d\n", count);
+    count = 0;
+    for (i = 0; i < RESERV_FP_SIZE; i++) {
+        if (reservFP[i] != NULL) count++;
+    }
+    printf("\tNum In rFP: %d\n\n", count);
+    count = 0;
+    for (i = 0; i < FU_INT_SIZE; i++) {
+        if (fuINT[i] != NULL) count++;
+    }
+    printf("\tNum In fuINT: %d\n", count);
+    count = 0;
+    for (i = 0; i < FU_FP_SIZE; i++) {
+        if (fuFP[i] != NULL) count++;
+    }
+    printf("\tNum In fuFP: %d\n\n", count);
+    printf("\tID In CDB: %d\n\n", commonDataBus == NULL ? -1 : commonDataBus->index);
+    
 }
