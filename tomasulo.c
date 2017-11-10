@@ -271,7 +271,7 @@ void issue_To_execute(int current_cycle) {
     for(i = 0; i < FU_INT_SIZE; i++) {
         if(fuINT[i] == NULL) {
             //can add an instruction
-            instruction_t *instr = get_oldest_ready_int_instr() //sets reservation station entry to NULL for that instr
+            instruction_t *instr = get_oldest_ready_int_instr();
             if(instr != NULL && instr->tom_issue_cycle  < current_cycle) {
                 instr->tom_execute_cycle = current_cycle;
             }
@@ -282,7 +282,7 @@ void issue_To_execute(int current_cycle) {
     for(i = 0; i < FU_FP_SIZE; i++) {
         if(fuFP[i] == NULL) {
             //can add an instruction
-            instruction_t *instr = pop_oldest_ready_fp_instr() //sets reservation station entry to NULL for that instr
+            instruction_t *instr = pop_oldest_ready_fp_instr();
             if(instr != NULL && instr->tom_issue_cycle  < current_cycle) {
                 instr->tom_execute_cycle = current_cycle;
             }
