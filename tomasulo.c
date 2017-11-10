@@ -181,13 +181,13 @@ int instr_is_ready(instruction_t *instr) {
 }
 
 
-instruction_t *get_oldest_int_instr() {
+instruction_t *get_oldest_ready_int_instr() {
     int i = 0;
     instruction_t *oldest_instr = NULL;
     
     for(; i < RESERV_INT_SIZE; i++) {
         instruction_t *instr = reservINT[i];
-        if(instr != NULL) {
+        if(instr != NULL && instr_is_ready(instr)) {
             if(oldest_instr == NULL) oldest_instr = instr; //if the first instr in the reservation station is NULL
             else if(instr->index < oldest_instr->index) oldest_instr = instr;
         }
@@ -195,13 +195,13 @@ instruction_t *get_oldest_int_instr() {
 }
 
 //only called when there is space available in FP_FU
-instruction_t *get_oldest_fp_instr() {
+instruction_t *get_oldest_ready_fp_instr() {
     int i = 0;
     instruction_t *oldest_instr = NULL;
     
     for(; i < RESERV_FP_SIZE; i++) {
         instruction_t *instr = reservFP[i];
-        if(instr != NULL) {
+        if(instr != NULL && instr_is_ready(instr)) {
             if(oldest_instr == NULL) oldest_instr = instr; //if the first instr in the reservation station is NULL
             else if(instr->index < oldest_instr->index) oldest_instr = instr;
         }
@@ -266,6 +266,28 @@ void execute_To_CDB(int current_cycle) {
 void issue_To_execute(int current_cycle) {
 
   /* ECE552: YOUR CODE GOES HERE */
+    //check if we can send an INT instruction through
+    int i;
+    for(i = 0; i < FU_INT_SIZE; i++) {
+        if(fuINT[i] == NULL) {
+            //can add an instruction
+            instruction_t *instr = get_oldest_ready_int_instr() //sets reservation station entry to NULL for that instr
+            if(instr != NULL && instr->tom_issue_cycle  < current_cycle) {
+                instr->tom_execute_cycle = current_cycle;
+            }
+        }
+    }
+    
+    //check if we can send an FP instruction through
+    for(i = 0; i < FU_FP_SIZE; i++) {
+        if(fuFP[i] == NULL) {
+            //can add an instruction
+            instruction_t *instr = pop_oldest_ready_fp_instr() //sets reservation station entry to NULL for that instr
+            if(instr != NULL && instr->tom_issue_cycle  < current_cycle) {
+                instr->tom_execute_cycle = current_cycle;
+            }
+        }
+    }
 }
 
 /* 
@@ -279,21 +301,23 @@ void issue_To_execute(int current_cycle) {
 void dispatch_To_issue(int current_cycle) {
 
   /* ECE552: YOUR CODE GOES HERE */
-    //check if we can send an INT instruction through
-    int i = 0;
-    for(; i < RESERV_INT_SIZE; i++) {
+    
+    int i;
+    
+    //since only one instruction enters dispatch in one cycle there should  only be one instruction with an unassigned issue cyle
+    
+    for(i = 0; i < RESERV_INT_SIZE; i++) {
         instruction_t *instr = reservINT[i];
-        if(instr && instr->tom_issue_cycle == 0) {
-            tom_issue_cycle = current_cycle;
+        if(instr && instr->tom_issue_cycle == 0 && instr->tom_dispatch_cycle < current_cycle) {
+            instr->tom_issue_cycle = current_cycle;
         }
     }
     
     //check if we can send an FP instruction through
-    i = 0;
-    for(; i < RESERV_FP_SIZE; i++) {
+    for(i = 0; i < RESERV_FP_SIZE; i++) {
         instruction_t *instr = reservFP[i];
-        if(instr && instr->tom_issue_cycle == 0) {
-            tom_issue_cycle = current_cycle;
+        if(instr && instr->tom_issue_cycle == 0 && instr->tom_dispatch_cycle < current_cycle) {
+            instr->tom_issue_cycle = current_cycle;
         }
     }
 }
@@ -348,8 +372,8 @@ void fetch_To_dispatch(instruction_trace_t* trace, int current_cycle) {
             
             //update mapTable and dependencies in RS
             update_map_table(next_instr);
-            int i = 0;
-            for(; i < NUM_INPUT_REGS; i++) {
+            int i;
+            for(i = 0; i < NUM_INPUT_REGS; i++) {
                 r_in = next_instr->r_in[i];
                 if(map_table[r_in] != NULL) {
                     next_instr->Q[i] = map_table[r_in];
@@ -369,8 +393,8 @@ void fetch_To_dispatch(instruction_trace_t* trace, int current_cycle) {
             
             //update mapTable and dependencies in RS
             update_map_table(next_instr);
-            int i = 0;
-            for(; i < NUM_INPUT_REGS; i++) {
+            int i;
+            for(i = 0; i < NUM_INPUT_REGS; i++) {
                 r_in = next_instr->r_in[i];
                 if(map_table[r_in] != NULL) {
                     next_instr->Q[i] = map_table[r_in];
@@ -430,6 +454,12 @@ counter_t runTomasulo(instruction_trace_t* trace)
   while (true) {
 
      /* ECE552: YOUR CODE GOES HERE */
+      fetch(trace, cycle);
+      fetch_To_dispatch(trace, cycle);
+      dispatch_To_issue(trace, cycle);
+      issue_To_execute(trace, cycle);
+      execute_To_CDB(trace, cycle);
+      CDB_To_retire(trace, cycle);
 
      cycle++;
 
