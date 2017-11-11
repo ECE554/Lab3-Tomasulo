@@ -135,6 +135,7 @@ void update_map_table(instruction_t* dispatched_instr) {
 
 //Check to see if all RAW hazards have been resolved
 bool instruction_ready(instruction_t* instr) {
+    if(instr->tom_issue_cycle == 0) return false;
     for (int i = 0; i < NUM_INPUT_REGS; i++) {
         if (instr->Q[i] == NULL) continue;
         if (instr->Q[i]->tom_cdb_cycle == 0) {
@@ -506,7 +507,9 @@ static bool is_simulation_done(counter_t sim_insn) {
     for (int i = 0; i < FU_FP_SIZE; i++) {
         if (fuFP[i] != NULL) return false;
     }
-
+    
+    if(commonDataBus) return false;
+    
     return true;  //ECE552: you can change this as needed; we've added this so the code provided to you compiles
 }
 
@@ -561,27 +564,32 @@ counter_t runTomasulo(instruction_trace_t* trace)
   while (true) {
      /* ECE552: YOUR CODE GOES HERE */
     //   fetch(trace, cycle);
-                int debug = 0;    
-                if(debug) printf("F2D\n");
-    fetch_To_dispatch(trace, cycle);
-                if(debug) printf("D2I\n");
-    dispatch_To_issue(cycle);
-                if(debug) printf("I2E\n");
-    issue_To_execute(cycle);
-                if(debug) printf("E2C\n");
+//                int debug = 0;
+//                if(debug) printf("F2D\n");
+//    fetch_To_dispatch(trace, cycle);
+//                if(debug) printf("D2I\n");
+//    dispatch_To_issue(cycle);
+//                if(debug) printf("I2E\n");
+//    issue_To_execute(cycle);
+//                if(debug) printf("E2C\n");
+//    execute_To_CDB(cycle);
+//                if(debug) printf("C2R\n");
+    
+    CDB_To_retire(cycle);
     execute_To_CDB(cycle);
-                if(debug) printf("C2R\n");
-    
-    
+    issue_To_execute(cycle);
+    dispatch_To_issue(cycle);
+    fetch_To_dispatch(trace, cycle);
+      
     if (is_simulation_done(sim_num_insn)) break;
 
 
-    if (cycle % 100 == 0){
+//    if (cycle % 100 == 0){
         // printf("\tID In CDB: %d\n\n", commonDataBus == NULL ? -1 : commonDataBus->index);
-        //debug_cycle(cycle);
-    }
+//        debug_cycle(cycle);
+//    }
 
-    CDB_To_retire(cycle);
+    
     cycle++;
   }
   
@@ -597,7 +605,7 @@ void debug_cycle(int cycle) {
     for(i = 0; i < INSTR_QUEUE_SIZE; i++) {
         if(instr_queue[i] != NULL) {
             count++;
-            // printf("\t\tRes INT i: %d index: %d OP: %d\n", i, instr_queue[i]->index, instr_queue[i]->op);
+             printf("\t\tinstruction queue i: %d index: %d OP: %d\n", i, instr_queue[i]->index, instr_queue[i]->op);
         }
     }
     printf("\tNum In IFQ: %d\n\n", count);
@@ -605,26 +613,32 @@ void debug_cycle(int cycle) {
     for (i = 0; i < RESERV_INT_SIZE; i++) {
         if (reservINT[i] != NULL) {
             count++;
-            // printf("\t\tRes INT i: %d index: %d OP: %d\n", i, reservINT[i]->index, reservINT[i]->op);
+             printf("\t\tRes INT i: %d index: %d OP: %d\n", i, reservINT[i]->index, reservINT[i]->op);
         }
     }
     printf("\tNum In rINT: %d\n", count);
     count = 0;
     for (i = 0; i < RESERV_FP_SIZE; i++) {
-        if (reservFP[i] != NULL) count++;
+        if (reservFP[i] != NULL) {
+            count++;
+            printf("\t\tRes FP i: %d index: %d OP: %d\n", i, reservFP[i]->index, reservFP[i]->op);
+        }
     }
     printf("\tNum In rFP: %d\n\n", count);
     count = 0;
     for (i = 0; i < FU_INT_SIZE; i++) {
         if (fuINT[i] != NULL){
              count++;
-            // printf("\t\tFU i: %d index: %d\n", i, fuINT[i]->index);
+             printf("\t\tFU i: %d index: %d\n", i, fuINT[i]->index);
         }
     }
     printf("\tNum In fuINT: %d\n", count);
     count = 0;
     for (i = 0; i < FU_FP_SIZE; i++) {
-        if (fuFP[i] != NULL) count++;
+        if (fuFP[i] != NULL) {
+            count++;
+            printf("\t\tFU i: %d index: %d\n", i, fuFP[i]->index);
+        }
     }
     printf("\tNum In fuFP: %d\n\n", count);
     printf("\tID In CDB: %d\n\n", commonDataBus == NULL ? -1 : commonDataBus->index);
