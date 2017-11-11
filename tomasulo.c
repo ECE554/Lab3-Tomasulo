@@ -302,7 +302,7 @@ void issue_To_execute(int current_cycle) {
         for (int i = 0; i < RESERV_INT_SIZE; i++) {
             if (reservINT[i] == NULL) continue;
 
-            if (instruction_ready(reservINT[i]) && reservINT[i]->tom_issue_cycle < current_cycle) {
+            if (instruction_ready(reservINT[i])) {
 
                 if (oldest_ready_instr == NULL) {
                     oldest_ready_instr = reservINT[i];
@@ -329,7 +329,7 @@ void issue_To_execute(int current_cycle) {
         for (int i = 0; i < RESERV_FP_SIZE; i++) {
             if (reservFP[i] == NULL) continue;
 
-            if (instruction_ready(reservFP[i]) && reservFP[i]->tom_issue_cycle < current_cycle) {
+            if (instruction_ready(reservFP[i])) {
 
                 if (oldest_ready_instr == NULL) {
                     oldest_ready_instr = reservFP[i];
@@ -368,6 +368,19 @@ void execute_To_CDB(int current_cycle) {
         if (fuINT[i] == NULL) continue;
 
         if (current_cycle - fuINT[i]->tom_execute_cycle >= FU_INT_LATENCY) {
+            if (IS_STORE(fuINT[i]->op)){
+                for (int j = 0; j < RESERV_INT_SIZE; j++) {
+                    if (reservINT[j] == NULL) continue;
+                    if (reservINT[j]->index == fuINT[i]->index) {
+                        reservINT[j] = NULL;
+                        break;
+                    }
+                }
+
+                fuINT[i] = NULL;
+                continue;
+            }
+
             if (oldest_completed_instr == NULL || oldest_completed_instr->index > fuINT[i]->index) {
                 oldest_is_int = true;
                 oldest_fu_index = i;
@@ -541,11 +554,7 @@ counter_t runTomasulo(instruction_trace_t* trace)
         //debug_cycle(cycle);
     }
 
-    
-
-
-
-     cycle++;
+    cycle++;
   }
   
   return cycle; 
