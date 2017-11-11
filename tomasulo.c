@@ -134,8 +134,8 @@ void update_map_table(instruction_t* dispatched_instr) {
 }
 
 //Check to see if all RAW hazards have been resolved
-bool instruction_ready(instruction_t* instr) {
-    if(instr->tom_issue_cycle == 0) return false;
+bool instruction_ready(instruction_t* instr, int current_cycle) {
+    if(instr->tom_issue_cycle == current_cycle || instr->tom_issue_cycle == 0) return false; //if it hasn't been issued or just got issued
     for (int i = 0; i < NUM_INPUT_REGS; i++) {
         if (instr->Q[i] == NULL) continue;
         if (instr->Q[i]->tom_cdb_cycle == 0) {
@@ -314,7 +314,7 @@ void issue_To_execute(int current_cycle) {
             }
             if (in_fu) continue;
 
-            if (instruction_ready(reservINT[i])) {
+            if (instruction_ready(reservINT[i], current_cycle)) {
 
                 if (oldest_ready_instr == NULL) {
                     oldest_ready_instr = reservINT[i];
@@ -351,7 +351,7 @@ void issue_To_execute(int current_cycle) {
             }
             if (in_fu) continue;
 
-            if (instruction_ready(reservFP[i])) {
+            if (instruction_ready(reservFP[i], current_cycle)) {
 
                 if (oldest_ready_instr == NULL) {
                     oldest_ready_instr = reservFP[i];
