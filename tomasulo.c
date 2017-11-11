@@ -117,6 +117,8 @@ void set_RAW_hazards(instruction_t* dispatched_instr) {
         int reg = dispatched_instr->r_in[i];
         if (reg > 0) {
             dispatched_instr->Q[i] = map_table[reg];
+        } else {
+            dispatched_instr->Q[i] = NULL;
         }
     }
 }
@@ -226,7 +228,6 @@ void fetch_To_dispatch(instruction_trace_t* trace, int current_cycle) {
     } 
 
     else if (USES_FP_FU(next_instr->op)) {
-        
         //Look for free spot in reserv
         int free_index = available_list_index(reservFP, RESERV_FP_SIZE);
         if (free_index == -1) return; //Reserv full, need to stall
@@ -302,6 +303,16 @@ void issue_To_execute(int current_cycle) {
         for (int i = 0; i < RESERV_INT_SIZE; i++) {
             if (reservINT[i] == NULL) continue;
 
+            bool in_fu = false;
+            for (int j = 0; j < FU_INT_SIZE; j++) {
+                if (fuINT[j] == NULL) continue;
+                if (reservINT[i]->index == fuINT[j]->index) {
+                    in_fu = true;
+                    break;
+                }
+            }
+            if (in_fu) continue;
+
             if (instruction_ready(reservINT[i])) {
 
                 if (oldest_ready_instr == NULL) {
@@ -328,6 +339,16 @@ void issue_To_execute(int current_cycle) {
         instruction_t* oldest_ready_instr = NULL;
         for (int i = 0; i < RESERV_FP_SIZE; i++) {
             if (reservFP[i] == NULL) continue;
+
+            bool in_fu = false;
+            for (int j = 0; j < FU_FP_SIZE; j++) {
+                if (fuFP[j] == NULL) continue;
+                if (reservFP[i]->index == fuFP[j]->index) {
+                    in_fu = true;
+                    break;
+                }
+            }
+            if (in_fu) continue;
 
             if (instruction_ready(reservFP[i])) {
 
@@ -443,6 +464,12 @@ void execute_To_CDB(int current_cycle) {
 void CDB_To_retire(int current_cycle) {
 
     /* ECE552: YOUR CODE GOES HERE */
+    if (commonDataBus == NULL) return;
+    for (int i = 0; i < MD_TOTAL_REGS; i++) {
+        if (map_table[i] == NULL) continue;
+        if (map_table[i]->index == commonDataBus->index) map_table[i] = NULL;
+    }
+
     commonDataBus = NULL;
 
 }
@@ -544,16 +571,17 @@ counter_t runTomasulo(instruction_trace_t* trace)
                 if(debug) printf("E2C\n");
     execute_To_CDB(cycle);
                 if(debug) printf("C2R\n");
-    CDB_To_retire(cycle);
     
     
     if (is_simulation_done(sim_num_insn)) break;
 
+
     if (cycle % 100 == 0){
-        //printf("\tID In CDB: %d\n\n", commonDataBus == NULL ? -1 : commonDataBus->index);
+        // printf("\tID In CDB: %d\n\n", commonDataBus == NULL ? -1 : commonDataBus->index);
         //debug_cycle(cycle);
     }
 
+    CDB_To_retire(cycle);
     cycle++;
   }
   
@@ -569,7 +597,7 @@ void debug_cycle(int cycle) {
     for(i = 0; i < INSTR_QUEUE_SIZE; i++) {
         if(instr_queue[i] != NULL) {
             count++;
-            printf("\t\tRes INT i: %d index: %d OP: %d\n", i, instr_queue[i]->index, instr_queue[i]->op);
+            // printf("\t\tRes INT i: %d index: %d OP: %d\n", i, instr_queue[i]->index, instr_queue[i]->op);
         }
     }
     printf("\tNum In IFQ: %d\n\n", count);
@@ -577,7 +605,7 @@ void debug_cycle(int cycle) {
     for (i = 0; i < RESERV_INT_SIZE; i++) {
         if (reservINT[i] != NULL) {
             count++;
-            printf("\t\tRes INT i: %d index: %d OP: %d\n", i, reservINT[i]->index, reservINT[i]->op);
+            // printf("\t\tRes INT i: %d index: %d OP: %d\n", i, reservINT[i]->index, reservINT[i]->op);
         }
     }
     printf("\tNum In rINT: %d\n", count);
@@ -590,7 +618,7 @@ void debug_cycle(int cycle) {
     for (i = 0; i < FU_INT_SIZE; i++) {
         if (fuINT[i] != NULL){
              count++;
-            printf("\t\tFU i: %d index: %d\n", i, fuINT[i]->index);
+            // printf("\t\tFU i: %d index: %d\n", i, fuINT[i]->index);
         }
     }
     printf("\tNum In fuINT: %d\n", count);
