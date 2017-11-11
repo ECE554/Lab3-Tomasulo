@@ -182,12 +182,17 @@ int instr_is_ready(instruction_t *instr) {
 
 
 instruction_t *get_oldest_ready_int_instr() {
-    int i = 0;
+    int i;
+    int j;
     instruction_t *oldest_instr = NULL;
     
-    for(; i < RESERV_INT_SIZE; i++) {
+    for(i = 0; i < RESERV_INT_SIZE; i++) {
         instruction_t *instr = reservINT[i];
-        if(instr != NULL && instr_is_ready(instr)) {
+        int in_FU = false;
+        for(j = 0; j < FU_INT_SIZE; j++){
+            if(fuINT[j] = instr) in_FU = true;
+        }
+        if(instr != NULL && !in_FU && instr_is_ready(instr)) {
             if(oldest_instr == NULL) oldest_instr = instr; //if the first instr in the reservation station is NULL
             else if(instr->index < oldest_instr->index) oldest_instr = instr;
         }
@@ -198,11 +203,18 @@ instruction_t *get_oldest_ready_int_instr() {
 
 //only called when there is space available in FP_FU
 instruction_t *get_oldest_ready_fp_instr() {
-    int i = 0;
+    int i;
+    int j;
     instruction_t *oldest_instr = NULL;
     
-    for(; i < RESERV_FP_SIZE; i++) {
+    for(i = 0; i < RESERV_FP_SIZE; i++) {
         instruction_t *instr = reservFP[i];
+        
+        int in_FU = false;
+        for(j = 0; j < FU_FP_SIZE; j++){
+            if(fuFP[j] = instr) in_FU = true;
+        }
+        
         if(instr != NULL && instr_is_ready(instr)) {
             if(oldest_instr == NULL) oldest_instr = instr; //if the first instr in the reservation station is NULL
             else if(instr->index < oldest_instr->index) oldest_instr = instr;
@@ -224,11 +236,27 @@ instruction_t *get_oldest_ready_fp_instr() {
 static bool is_simulation_done(counter_t sim_insn) {
 
   /* ECE552: YOUR CODE GOES HERE */
-    int rtn = 0;
-    if (commonDataBus != NULL && commonDataBus->index >= sim_insn - 1) rtn = true;
-    rtn = false; 
-    commonDataBus = NULL;
-    return rtn;
+//    int rtn = 0;
+//    if (commonDataBus != NULL && commonDataBus->index >= sim_insn - 1) rtn = true;
+//    rtn = false;
+//    commonDataBus = NULL;
+//    return rtn;
+    if(commonDataBus != NULL) return false;
+    
+    int i;
+    for(i = 0; i < RESERV_INT_SIZE; i++) {
+        if(reservINT[i] != NULL) return false;
+    }
+
+    for(i = 0; i < RESERV_FP_SIZE; i++) {
+        if(reservFP[i] != NULL) return false;
+    }
+    
+    for(i = 0; i < INSTR_QUEUE_SIZE; i++) {
+        if(instr_queue[i] != NULL) return false;
+    }
+    
+    return true;
     
     //ECE552: you can change this as needed; we've added this so the code provided to you compiles
 }
@@ -253,7 +281,10 @@ void CDB_To_retire(int current_cycle) {
         instruction_t *instr = reservINT[i];
         if (instr == NULL) continue;
         for (j = 0; j < NUM_INPUT_REGS; j++) {
-            if (instr->Q[j] == commonDataBus) instr->Q[j] = NULL;
+            if (instr->Q[j] == commonDataBus) {
+                instr->Q[j] = NULL;
+                commonDataBus = NULL;
+            }
         }
     }
 
@@ -262,7 +293,10 @@ void CDB_To_retire(int current_cycle) {
         instruction_t *instr = reservFP[i];
         if (instr == NULL) continue;
         for (j = 0; j < NUM_INPUT_REGS; j++) {
-            if (instr->Q[j] == commonDataBus) instr->Q[j] = NULL;
+            if (instr->Q[j] == commonDataBus) {
+                instr->Q[j] = NULL;
+                commonDataBus = NULL;
+            }
         }
     }
 }
@@ -320,8 +354,24 @@ void execute_To_CDB(int current_cycle) {
 
     if (commonDataBus != NULL) {
         commonDataBus->tom_cdb_cycle = current_cycle; //Only the last set instr (oldest) gets to use the CDB
-        if (cdbINT) fuINT[cdb_index] = NULL;
-        else fuFP[cdb_index] = NULL;
+        if (cdbINT) {
+            fuINT[cdb_index] = NULL;
+            for(i = 0; i < RESERV_INT_SIZE; i++) {
+                if(reservINT[i] == commonDataBus) {
+                    reservINT[i] = NULL;
+                    break;
+                }
+            }
+        }
+            else {
+                fuFP[cdb_index] = NULL;
+                for(i = 0; i < RESERV_FP_SIZE; i++) {
+                    if(reservFP[i] == commonDataBus) {
+                        reservFP[i] = NULL;
+                        break;
+                    }
+                }
+            }
     }
 }
 
@@ -446,6 +496,7 @@ void fetch_To_dispatch(instruction_trace_t* trace, int current_cycle) {
             if(reservINT[i] == NULL) {
                 reservINT[i] = next_instr;
                 rs_idx = i;
+                break;
             }
         }
 
@@ -471,6 +522,7 @@ void fetch_To_dispatch(instruction_trace_t* trace, int current_cycle) {
             if(reservFP[i] == NULL) {
                 reservFP[i] = next_instr;
                 rs_idx = i;
+                break;
             }
         }
 
@@ -552,7 +604,7 @@ counter_t runTomasulo(instruction_trace_t* trace)
       CDB_To_retire(cycle);
 
 
-                debug_cycle(cycle);
+//                debug_cycle(cycle);
 
      cycle++;
      if (is_simulation_done(sim_num_insn))
@@ -569,17 +621,26 @@ void debug_cycle(int cycle) {
     int count = 0;
 
     for(i = 0; i < INSTR_QUEUE_SIZE; i++) {
-        if(instr_queue[i] != NULL) count++;
+        if(instr_queue[i] != NULL) {
+            count++;
+             printf("\tinstr: %d->", instr_queue[i]->index);
+        }
     }
     printf("\tNum In IFQ: %d\n\n", count);
     count = 0;
     for (i = 0; i < RESERV_INT_SIZE; i++) {
-        if (reservINT[i] != NULL) count++;
+        if (reservINT[i] != NULL) {
+            count++;
+            printf("\tinstr: %d,", reservINT[i]->index);
+        }
     }
     printf("\tNum In rINT: %d\n", count);
     count = 0;
     for (i = 0; i < RESERV_FP_SIZE; i++) {
-        if (reservFP[i] != NULL) count++;
+        if (reservFP[i] != NULL) {
+            count++;
+            printf("\tinstr: %d,", reservFP[i]->index);
+        }
     }
     printf("\tNum In rFP: %d\n\n", count);
     count = 0;
