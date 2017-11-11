@@ -115,7 +115,7 @@ static int fetch_index = 0;
 void set_RAW_hazards(instruction_t* dispatched_instr) {
     for (int i = 0; i < NUM_INPUT_REGS; i++) {
         int reg = dispatched_instr->r_in[i];
-        if (reg > 0) {
+        if (reg >= 0) {
             dispatched_instr->Q[i] = map_table[reg];
         }
     }
@@ -125,7 +125,7 @@ void set_RAW_hazards(instruction_t* dispatched_instr) {
 void update_map_table(instruction_t* dispatched_instr) {
     for (int i = 0; i < NUM_OUTPUT_REGS; i++) {
         int reg = dispatched_instr->r_out[i];
-        if (reg > 0) {
+        if (reg >= 0) {
             map_table[reg] = dispatched_instr;
         }
     }
@@ -266,7 +266,7 @@ void dispatch_To_issue(int current_cycle) {
         if (reservINT[i] == NULL) continue;
         if (reservINT[i]->tom_issue_cycle == 0 && reservINT[i]->tom_dispatch_cycle < current_cycle) {
             reservINT[i]->tom_issue_cycle = current_cycle;
-            break; //Only 1 instr issued / cycle
+//            break; //Only 1 instr issued / cycle
         }
     }
 
@@ -274,7 +274,7 @@ void dispatch_To_issue(int current_cycle) {
         if (reservFP[i] == NULL) continue;
         if (reservFP[i]->tom_issue_cycle == 0 && reservFP[i]->tom_dispatch_cycle < current_cycle) {
             reservFP[i]->tom_issue_cycle = current_cycle;
-            break; //Only 1 instr issued / cycle
+//            break; //Only 1 instr issued / cycle
         }
     }
 
