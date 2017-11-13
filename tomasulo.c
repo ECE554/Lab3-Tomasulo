@@ -115,7 +115,7 @@ static int fetch_index = 0;
 void set_RAW_hazards(instruction_t* dispatched_instr) {
     for (int i = 0; i < NUM_INPUT_REGS; i++) {
         int reg = dispatched_instr->r_in[i];
-        if (reg >= 0) {
+        if (reg > 0) {
             dispatched_instr->Q[i] = map_table[reg];
         } else {
             dispatched_instr->Q[i] = NULL;
@@ -127,7 +127,7 @@ void set_RAW_hazards(instruction_t* dispatched_instr) {
 void update_map_table(instruction_t* dispatched_instr) {
     for (int i = 0; i < NUM_OUTPUT_REGS; i++) {
         int reg = dispatched_instr->r_out[i];
-        if (reg >= 0) {
+        if (reg > 0) {
             map_table[reg] = dispatched_instr;
         }
     }
@@ -135,10 +135,9 @@ void update_map_table(instruction_t* dispatched_instr) {
 
 //Check to see if all RAW hazards have been resolved
 bool instruction_ready(instruction_t* instr, int current_cycle) {
-    if(instr->tom_issue_cycle == current_cycle || instr->tom_issue_cycle == 0) return false; //if it hasn't been issued or just got issued
     for (int i = 0; i < NUM_INPUT_REGS; i++) {
         if (instr->Q[i] == NULL) continue;
-        if (instr->Q[i]->tom_cdb_cycle == 0) {
+        if (instr->Q[i]->tom_cdb_cycle == 0 || instr->Q[i]->tom_cdb_cycle == current_cycle) {
             return false;
         }
     }
@@ -268,7 +267,7 @@ void dispatch_To_issue(int current_cycle) {
         if (reservINT[i] == NULL) continue;
         if (reservINT[i]->tom_issue_cycle == 0 && reservINT[i]->tom_dispatch_cycle < current_cycle) {
             reservINT[i]->tom_issue_cycle = current_cycle;
-//            break; //Only 1 instr issued / cycle
+            break; //Only 1 instr issued / cycle
         }
     }
 
@@ -276,7 +275,7 @@ void dispatch_To_issue(int current_cycle) {
         if (reservFP[i] == NULL) continue;
         if (reservFP[i]->tom_issue_cycle == 0 && reservFP[i]->tom_dispatch_cycle < current_cycle) {
             reservFP[i]->tom_issue_cycle = current_cycle;
-//            break; //Only 1 instr issued / cycle
+            break; //Only 1 instr issued / cycle
         }
     }
 
@@ -304,6 +303,7 @@ void issue_To_execute(int current_cycle) {
         for (int i = 0; i < RESERV_INT_SIZE; i++) {
             if (reservINT[i] == NULL) continue;
 
+            //Don't add same instr twice to FU
             bool in_fu = false;
             for (int j = 0; j < FU_INT_SIZE; j++) {
                 if (fuINT[j] == NULL) continue;
@@ -507,9 +507,9 @@ static bool is_simulation_done(counter_t sim_insn) {
     for (int i = 0; i < FU_FP_SIZE; i++) {
         if (fuFP[i] != NULL) return false;
     }
-    
-    if(commonDataBus) return false;
-    
+
+    if (commonDataBus != NULL) return false;
+
     return true;  //ECE552: you can change this as needed; we've added this so the code provided to you compiles
 }
 
@@ -564,36 +564,44 @@ counter_t runTomasulo(instruction_trace_t* trace)
   while (true) {
      /* ECE552: YOUR CODE GOES HERE */
     //   fetch(trace, cycle);
-//                int debug = 0;
-//                if(debug) printf("F2D\n");
-//    fetch_To_dispatch(trace, cycle);
-//                if(debug) printf("D2I\n");
-//    dispatch_To_issue(cycle);
-//                if(debug) printf("I2E\n");
-//    issue_To_execute(cycle);
-//                if(debug) printf("E2C\n");
-//    execute_To_CDB(cycle);
-//                if(debug) printf("C2R\n");
+    int debug = 1;    
     
+    if (debug != 0){
+        printf("Press enter for next cycle...\n");
+        char enter = 0;
+        while (enter != '\r' && enter != '\n') { enter = getchar(); }
+        debug_cycle(cycle);
+    }
+
     CDB_To_retire(cycle);
     execute_To_CDB(cycle);
     issue_To_execute(cycle);
-    dispatch_To_issue(cycle);
     fetch_To_dispatch(trace, cycle);
-      
+    dispatch_To_issue(cycle);
+    
     if (is_simulation_done(sim_num_insn)) break;
 
 
-//    if (cycle % 100 == 0){
-        // printf("\tID In CDB: %d\n\n", commonDataBus == NULL ? -1 : commonDataBus->index);
-//        debug_cycle(cycle);
-//    }
 
-    
     cycle++;
   }
   
   return cycle; 
+}
+
+void print_instr(instruction_t* instr) {
+    if (instr == NULL) {
+        printf("NULL\n");
+        return;
+    }
+
+    printf("#%d, T:", instr->index);
+    if (IS_BRANCH(instr->op)) printf("bra");
+    if (USES_INT_FU(instr->op)) printf("int");
+    if (USES_FP_FU(instr->op)) printf("fpt");
+    printf(" in: %d, %d, %d", instr->r_in[0], instr->r_in[1], instr->r_in[2]);
+    printf(" out: %d, %d", instr->r_out[0], instr->r_out[1]);
+    printf("\n");
 }
 
 void debug_cycle(int cycle) {
@@ -602,45 +610,61 @@ void debug_cycle(int cycle) {
     int i = 0;
     int count = 0;
 
+    printf("IFQ:\n");
     for(i = 0; i < INSTR_QUEUE_SIZE; i++) {
         if(instr_queue[i] != NULL) {
             count++;
-             printf("\t\tinstruction queue i: %d index: %d OP: %d\n", i, instr_queue[i]->index, instr_queue[i]->op);
+            printf("\t[%d]: ", i);
+            print_instr(instr_queue[i]);
         }
     }
     printf("\tNum In IFQ: %d\n\n", count);
+
+    printf("rINT:\n");
     count = 0;
     for (i = 0; i < RESERV_INT_SIZE; i++) {
         if (reservINT[i] != NULL) {
             count++;
-             printf("\t\tRes INT i: %d index: %d OP: %d\n", i, reservINT[i]->index, reservINT[i]->op);
+            printf("\t[%d]: ", i);
+            print_instr(reservINT[i]);
         }
     }
-    printf("\tNum In rINT: %d\n", count);
+    printf("\tNum In rINT: %d\n\n", count);
+    
+    printf("rFP:\n");
     count = 0;
     for (i = 0; i < RESERV_FP_SIZE; i++) {
         if (reservFP[i] != NULL) {
             count++;
-            printf("\t\tRes FP i: %d index: %d OP: %d\n", i, reservFP[i]->index, reservFP[i]->op);
+            printf("\t[%d]: ", i);
+            print_instr(reservFP[i]);
         }
     }
     printf("\tNum In rFP: %d\n\n", count);
+    
+    printf("fuINT:\n");
     count = 0;
     for (i = 0; i < FU_INT_SIZE; i++) {
         if (fuINT[i] != NULL){
-             count++;
-             printf("\t\tFU i: %d index: %d\n", i, fuINT[i]->index);
+            count++;
+            printf("\t[%d]: ", i);
+            print_instr(fuINT[i]);
         }
     }
-    printf("\tNum In fuINT: %d\n", count);
+    printf("\tNum In fuINT: %d\n\n", count);
+    
+    printf("fuFP:\n");
     count = 0;
     for (i = 0; i < FU_FP_SIZE; i++) {
         if (fuFP[i] != NULL) {
             count++;
-            printf("\t\tFU i: %d index: %d\n", i, fuFP[i]->index);
+            printf("\t[%d]: ", i);
+            print_instr(fuINT[i]);
         }
     }
     printf("\tNum In fuFP: %d\n\n", count);
-    printf("\tID In CDB: %d\n\n", commonDataBus == NULL ? -1 : commonDataBus->index);
+    printf("In CDB:\n");
+    print_instr(commonDataBus);
+    printf("--------------------------------------------------\n\n");
     
 }
