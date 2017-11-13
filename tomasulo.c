@@ -564,7 +564,7 @@ counter_t runTomasulo(instruction_trace_t* trace)
   while (true) {
      /* ECE552: YOUR CODE GOES HERE */
     //   fetch(trace, cycle);
-    int debug = 1;    
+    int debug = 0;    
     
     if (debug != 0){
         printf("Press enter for next cycle...\n");
